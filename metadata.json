@@ -1,0 +1,6 @@
+{
+  "name": "GeoMark Satellite Studio",
+  "description": "Real-time satellite-based land marking and layout studio. Mark parcel outlines, calculate acreage, organize layout zones, and export map sheets and GIS files.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
