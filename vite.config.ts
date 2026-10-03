@@ -4,12 +4,23 @@ import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
+  const cartoApiKey =
+    process.env.CARTO_API_KEY ||
+    process.env.BASEMAP_API_KEY ||
+    process.env.VITE_CARTO_API_KEY ||
+    process.env.VITE_BASEMAP_API_KEY ||
+    '';
+
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
+    },
+    define: {
+      'import.meta.env.VITE_CARTO_API_KEY': JSON.stringify(cartoApiKey),
+      'import.meta.env.VITE_BASEMAP_API_KEY': JSON.stringify(cartoApiKey),
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.

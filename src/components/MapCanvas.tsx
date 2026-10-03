@@ -36,6 +36,7 @@ import {
   CLIMATE_METRIC_CONFIGS,
   RegionalClimateStats,
 } from '../utils/climateService';
+import { resolveCartoTileConfig } from '../utils/cartoConfig';
 
 interface MapCanvasProps {
   project: LandProject;
@@ -150,6 +151,14 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
   // Live mouse hover preview for drawing & snapping
   const [hoverPoint, setHoverPoint] = useState<GeoPoint | null>(null);
   const [activeSnapTarget, setActiveSnapTarget] = useState<GeoPoint | null>(null);
+  const [cartoKeyVersion, setCartoKeyVersion] = useState(0);
+
+  // Listen to manual or dynamic CARTO key changes so map reloads instantly
+  useEffect(() => {
+    const handleKeyChange = () => setCartoKeyVersion((v) => v + 1);
+    window.addEventListener('carto-key-updated', handleKeyChange);
+    return () => window.removeEventListener('carto-key-updated', handleKeyChange);
+  }, []);
 
   // 1. Initialize Map
   useEffect(() => {
@@ -214,6 +223,7 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
     let attribution = 'Tiles &copy; Esri &mdash; Source: Esri, USDA, USGS';
     let maxNativeZoom = 21;
     const maxZoom = 24;
+    let subdomains: string[] | string = 'abc';
 
     if (basemapId === 'esri_clarity') {
       tileUrl = 'https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
@@ -222,32 +232,10 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
       tileUrl = 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}';
       attribution = 'USGS The National Map';
       maxNativeZoom = 19;
-    } else if (basemapId === 'carto_voyager') {
-      tileUrl = '/api/tiles/carto/voyager/{z}/{x}/{y}';
-      attribution = '&copy; OpenStreetMap contributors &copy; CARTO';
-      maxNativeZoom = 22;
-    } else if (basemapId === 'carto_voyager_clean') {
-      tileUrl = '/api/tiles/carto/voyager_clean/{z}/{x}/{y}';
-      attribution = '&copy; OpenStreetMap contributors &copy; CARTO';
-      maxNativeZoom = 22;
-    } else if (basemapId === 'carto_voyager_hd') {
-      tileUrl = '/api/tiles/carto/voyager_hd/{z}/{x}/{y}';
-      attribution = '&copy; OpenStreetMap contributors &copy; CARTO';
-      maxNativeZoom = 22;
-    } else if (basemapId === 'carto_dark') {
-      tileUrl = '/api/tiles/carto/dark/{z}/{x}/{y}';
-      attribution = '&copy; OpenStreetMap contributors &copy; CARTO';
-      maxNativeZoom = 22;
-    } else if (basemapId === 'carto_dark_clean') {
-      tileUrl = '/api/tiles/carto/dark_clean/{z}/{x}/{y}';
-      attribution = '&copy; OpenStreetMap contributors &copy; CARTO';
-      maxNativeZoom = 22;
-    } else if (basemapId === 'carto_positron') {
-      tileUrl = '/api/tiles/carto/positron/{z}/{x}/{y}';
-      attribution = '&copy; OpenStreetMap contributors &copy; CARTO';
-      maxNativeZoom = 22;
-    } else if (basemapId === 'carto_positron_clean') {
-      tileUrl = '/api/tiles/carto/positron_clean/{z}/{x}/{y}';
+    } else if (basemapId.startsWith('carto_')) {
+      const cartoConfig = resolveCartoTileConfig(basemapId);
+      tileUrl = cartoConfig.url;
+      subdomains = cartoConfig.subdomains;
       attribution = '&copy; OpenStreetMap contributors &copy; CARTO';
       maxNativeZoom = 22;
     } else if (basemapId === 'osm') {
@@ -256,11 +244,17 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
       maxNativeZoom = 22;
     }
 
+    // Transparent pixel fallback to guarantee map tiles never go black if network drops or 404 occurs
+    const transparentFallback =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
     baseTileLayerRef.current = L.tileLayer(tileUrl, {
       attribution,
       maxZoom,
       maxNativeZoom,
       keepBuffer: 8,
+      subdomains,
+      errorTileUrl: transparentFallback,
       crossOrigin: 'anonymous',
     }).addTo(map);
 
@@ -271,12 +265,13 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
           maxZoom: 24,
           maxNativeZoom: 22,
           keepBuffer: 8,
+          errorTileUrl: transparentFallback,
           crossOrigin: 'anonymous',
           opacity: 0.85,
         }
       ).addTo(map);
     }
-  }, [basemapId, showLabels]);
+  }, [basemapId, showLabels, cartoKeyVersion]);
 
   // 4. Soil Quality & Agricultural Suitability Heatmap Overlay
   useEffect(() => {
