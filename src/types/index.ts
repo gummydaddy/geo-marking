@@ -270,6 +270,8 @@ export interface UserLocation {
   speed?: number | null; // in m/s
   altitude?: number | null; // in meters
   timestamp: number;
+  source?: 'gps' | 'ip' | 'manual';
+  cityName?: string;
 }
 
 

@@ -22,6 +22,7 @@ import {
   importGeoJSONToProject,
   downloadFile,
 } from './utils/exportImport';
+import { fetchIpLocation } from './utils/ipLocationService';
 
 import { Header } from './components/Header';
 import { DrawingToolbar } from './components/DrawingToolbar';
@@ -588,23 +589,71 @@ export default function App() {
     }
   }, []);
 
-  const handlePositionError = useCallback((err: GeolocationPositionError) => {
-    setIsLocating(false);
-    let msg = 'Unable to acquire location';
-    if (err.code === err.PERMISSION_DENIED) {
-      msg = 'Location permission denied by browser.';
-    } else if (err.code === err.POSITION_UNAVAILABLE) {
-      msg = 'Location signal unavailable.';
-    } else if (err.code === err.TIMEOUT) {
-      msg = 'Location request timed out.';
+  const handlePositionError = useCallback(
+    async (err: GeolocationPositionError, autoCenter = false) => {
+      setIsLocating(false);
+
+      // If browser permission denied or signal unavailable, smoothly fallback to IP-based approximate location
+      if (err.code === err.PERMISSION_DENIED || err.code === err.POSITION_UNAVAILABLE) {
+        try {
+          const ipResult = await fetchIpLocation();
+          setUserLocation(ipResult.location);
+          setIsLocationTracking(false);
+          setLocationError(
+            `Browser blocked GPS access. Located approximately near ${ipResult.location.cityName || ipResult.city || 'your area'}.`
+          );
+          if (autoCenter || !hasAutoCenteredToUserRef.current) {
+            hasAutoCenteredToUserRef.current = true;
+            if (leafletMapRef.current) {
+              leafletMapRef.current.setView([ipResult.location.lat, ipResult.location.lng], 14, { animate: true });
+            }
+          }
+          return;
+        } catch {
+          // If IP lookup also failed, show actionable message
+        }
+      }
+
+      let msg = 'Unable to acquire location.';
+      if (err.code === err.PERMISSION_DENIED) {
+        msg = 'Location permission denied by browser. Click the lock icon in the address bar to allow, or use approximate location below.';
+      } else if (err.code === err.POSITION_UNAVAILABLE) {
+        msg = 'Location signal unavailable. Try searching a city or address.';
+      } else if (err.code === err.TIMEOUT) {
+        msg = 'Location request timed out. Retrying...';
+      }
+      setLocationError(msg);
+    },
+    []
+  );
+
+  // Manual trigger for approximate IP-based location (zero browser permissions needed)
+  const handleUseIpLocation = useCallback(async () => {
+    setIsLocating(true);
+    setLocationError(null);
+    try {
+      const ipResult = await fetchIpLocation();
+      setUserLocation(ipResult.location);
+      setIsLocating(false);
+      setIsLocationTracking(false);
+      setLocationError(null);
+      if (leafletMapRef.current) {
+        leafletMapRef.current.setView([ipResult.location.lat, ipResult.location.lng], 14, { animate: true });
+      }
+    } catch {
+      setIsLocating(false);
+      setLocationError('Could not determine approximate location. Try searching by city name or address.');
     }
-    setLocationError(msg);
+  }, []);
+
+  const handleDismissLocationError = useCallback(() => {
+    setLocationError(null);
   }, []);
 
   // Start real-time GPS location tracking
   const startLocationTracking = useCallback((autoCenter = false) => {
     if (!('geolocation' in navigator)) {
-      setLocationError('Geolocation is not supported by your browser.');
+      handleUseIpLocation();
       return;
     }
 
@@ -613,13 +662,13 @@ export default function App() {
 
     const geoOptions: PositionOptions = {
       enableHighAccuracy: true,
-      timeout: 12000,
+      timeout: 10000,
       maximumAge: 0,
     };
 
     navigator.geolocation.getCurrentPosition(
       (pos) => handlePositionSuccess(pos, autoCenter),
-      (err) => handlePositionError(err),
+      (err) => handlePositionError(err, autoCenter),
       geoOptions
     );
 
@@ -632,7 +681,7 @@ export default function App() {
         (pos) => handlePositionSuccess(pos, false),
         (err) => {
           if (!userLocation) {
-            handlePositionError(err);
+            handlePositionError(err, false);
           }
         },
         geoOptions
@@ -641,7 +690,7 @@ export default function App() {
     } catch (e) {
       console.error('Failed to setup watchPosition:', e);
     }
-  }, [handlePositionSuccess, handlePositionError, userLocation]);
+  }, [handlePositionSuccess, handlePositionError, handleUseIpLocation, userLocation]);
 
   // Stop real-time GPS location tracking
   const stopLocationTracking = useCallback(() => {
@@ -804,6 +853,9 @@ export default function App() {
             onToggleLocationTracking={handleToggleLocationTracking}
             onCenterUserLocation={handleCenterUserLocation}
             locationError={locationError}
+            onUseIpLocation={handleUseIpLocation}
+            onDismissLocationError={handleDismissLocationError}
+            onOpenLocationSearch={() => setIsLocationSearchOpen(true)}
           />
         </main>
 

@@ -127,6 +127,60 @@ export function createApiApp(): Express {
     });
   });
 
+  // Approximate IP-based Geolocation Endpoint
+  app.get('/api/location/ip', async (req, res) => {
+    const forwarded = req.headers['x-forwarded-for'];
+    const ip = typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : req.socket.remoteAddress || '';
+
+    try {
+      const ipQueryUrl =
+        ip && !ip.startsWith('127.') && !ip.startsWith('192.168.') && ip !== '::1'
+          ? `https://ipwho.is/${encodeURIComponent(ip)}`
+          : 'https://ipwho.is/';
+
+      const fetchRes = await fetch(ipQueryUrl, {
+        headers: { 'User-Agent': 'GeoMark-Studio/1.0' },
+      });
+
+      if (fetchRes.ok) {
+        const data = await fetchRes.json();
+        if (data.success && data.latitude && data.longitude) {
+          return res.json({
+            status: 'ok',
+            lat: data.latitude,
+            lng: data.longitude,
+            city: data.city || '',
+            region: data.region || '',
+            country: data.country || '',
+            accuracy: 3500,
+          });
+        }
+      }
+
+      // Secondary fallback
+      const fbRes = await fetch('https://freeipapi.com/api/json');
+      if (fbRes.ok) {
+        const fbData = await fbRes.json();
+        if (fbData.latitude && fbData.longitude) {
+          return res.json({
+            status: 'ok',
+            lat: fbData.latitude,
+            lng: fbData.longitude,
+            city: fbData.cityName || '',
+            region: fbData.regionName || '',
+            country: fbData.countryName || '',
+            accuracy: 4000,
+          });
+        }
+      }
+
+      res.status(500).json({ status: 'error', message: 'Unable to resolve IP location' });
+    } catch (err) {
+      console.error('[IP Location Error]:', err);
+      res.status(500).json({ status: 'error', message: 'IP location resolution failed' });
+    }
+  });
+
   // ==========================================
   // PLACES, SHOPS & BUILDING NAMES SEARCH API
   // ==========================================

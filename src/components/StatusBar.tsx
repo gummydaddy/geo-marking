@@ -77,9 +77,11 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         {userLocation && (
           <>
             <span className="hidden lg:inline text-slate-600">|</span>
-            <span className="hidden lg:flex items-center gap-1 text-blue-400">
+            <span className="hidden lg:flex items-center gap-1 text-cyan-400">
               <LocateFixed className="w-3 h-3" />
-              <span>GPS: ±{Math.round(userLocation.accuracy)}m</span>
+              <span>
+                {userLocation.source === 'ip' ? 'IP LOC' : 'GPS'}: ±{Math.round(userLocation.accuracy)}m
+              </span>
             </span>
           </>
         )}

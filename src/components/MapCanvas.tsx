@@ -23,7 +23,7 @@ import {
   formatDistance,
   generateSetbackPolygon,
 } from '../utils/geoMath';
-import { Navigation, Loader2, AlertCircle, Crosshair } from 'lucide-react';
+import { Navigation, Loader2, AlertCircle, Crosshair, Globe, X, Search } from 'lucide-react';
 import { generateSolarArrayRows } from '../utils/solarCalculator';
 import {
   getSoilProbe,
@@ -81,6 +81,9 @@ interface MapCanvasProps {
   onToggleLocationTracking?: () => void;
   onCenterUserLocation?: () => void;
   locationError?: string | null;
+  onUseIpLocation?: () => void;
+  onDismissLocationError?: () => void;
+  onOpenLocationSearch?: () => void;
 }
 
 export const MapCanvas: React.FC<MapCanvasProps> = ({
@@ -126,6 +129,9 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
   onToggleLocationTracking,
   onCenterUserLocation,
   locationError,
+  onUseIpLocation,
+  onDismissLocationError,
+  onOpenLocationSearch,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -603,6 +609,11 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
       zIndexOffset: 3000,
     });
 
+    const isIpLocation = userLocation.source === 'ip';
+    const locTitle = isIpLocation
+      ? `Approximate Location (${userLocation.cityName || 'IP Area'})`
+      : 'Real-Time GPS Location';
+
     const accuracyFormatted =
       project.unitPreference === 'imperial'
         ? `±${Math.round(userLocation.accuracy * 3.28084)} ft`
@@ -611,14 +622,14 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
     marker.bindTooltip(
       `<div class="font-sans text-xs p-1 select-none pointer-events-none">
         <div class="font-bold text-white flex items-center gap-1.5">
-          <span class="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span>
-          <span>Your Real-Time Location</span>
+          <span class="w-2 h-2 rounded-full ${isIpLocation ? 'bg-cyan-400' : 'bg-blue-500 animate-ping'}"></span>
+          <span>${locTitle}</span>
         </div>
         <div class="text-[10px] font-mono text-cyan-300 mt-0.5">
           ${userLocation.lat.toFixed(6)}°, ${userLocation.lng.toFixed(6)}°
         </div>
         <div class="text-[9px] text-slate-400 mt-0.5">
-          Accuracy: <strong class="text-white">${accuracyFormatted}</strong>
+          ${isIpLocation ? 'Method: Network Geocoding' : `Accuracy: <strong class="text-white">${accuracyFormatted}</strong>`}
         </div>
       </div>`,
       {
@@ -1489,19 +1500,63 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
         </div>
       )}
 
-      {/* Floating GPS Real-Time Location Button */}
+      {/* Floating GPS Real-Time Location Button & Recovery Controls */}
       <div className="absolute bottom-20 right-4 z-20 flex flex-col items-end gap-2 pointer-events-auto">
         {locationError && (
-          <div className="bg-rose-950/90 border border-rose-500/80 text-rose-200 text-xs px-2.5 py-1.5 rounded-xl shadow-2xl flex items-center gap-2 animate-in fade-in max-w-[240px]">
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-            <span className="text-[10px] leading-tight">{locationError}</span>
+          <div className="bg-slate-900/95 border border-amber-500/70 text-slate-200 text-xs p-3 rounded-2xl shadow-2xl flex flex-col gap-2.5 animate-in fade-in max-w-[280px] backdrop-blur-md">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-1.5 font-bold text-amber-300 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                <span>Location Access Notice</span>
+              </div>
+              {onDismissLocationError && (
+                <button
+                  onClick={onDismissLocationError}
+                  className="text-slate-400 hover:text-white p-0.5 rounded transition-colors cursor-pointer"
+                  title="Dismiss notice"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <p className="text-[11px] text-slate-300 leading-snug">{locationError}</p>
+
+            <div className="flex flex-col gap-1.5 pt-1.5 border-t border-slate-800">
+              {onUseIpLocation && (
+                <button
+                  onClick={onUseIpLocation}
+                  className="w-full py-1.5 px-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-md"
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>Use Approximate Location (IP)</span>
+                </button>
+              )}
+
+              {onOpenLocationSearch && (
+                <button
+                  onClick={onOpenLocationSearch}
+                  className="w-full py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium border border-slate-700 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Search className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Search City or Address</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {userLocation?.source === 'ip' && (
+          <div className="bg-slate-900/90 border border-cyan-500/40 px-2.5 py-1 rounded-full text-[10px] text-cyan-300 font-mono shadow-lg flex items-center gap-1.5 backdrop-blur-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+            <span>Approx: {userLocation.cityName || 'Network IP'}</span>
           </div>
         )}
 
         {userLocation && onCenterUserLocation && (
           <button
             onClick={onCenterUserLocation}
-            className="w-10 h-10 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-blue-500/60 text-blue-400 hover:text-white flex items-center justify-center transition-all shadow-xl backdrop-blur-md group"
+            className="w-10 h-10 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-blue-500/60 text-blue-400 hover:text-white flex items-center justify-center transition-all shadow-xl backdrop-blur-md group cursor-pointer"
             title="Center Map on Current Location"
           >
             <Crosshair className="w-5 h-5 group-hover:scale-110 transition-transform" />
@@ -1510,7 +1565,7 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
 
         <button
           onClick={onToggleLocationTracking}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-xl backdrop-blur-md border ${
+          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-xl backdrop-blur-md border cursor-pointer ${
             isLocationTracking
               ? 'bg-blue-600/30 border-blue-400 text-blue-300 shadow-blue-500/30 ring-2 ring-blue-500/40'
               : isLocating
